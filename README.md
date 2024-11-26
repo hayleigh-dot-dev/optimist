@@ -76,12 +76,11 @@ let response = Ok(1)
 let resolved = wibble |> optimist.try(response, int.add)
 ```
 
-- [`reject`](https://hexdocs.pm/optimist/optimist.html#reject) the optimistic
-  update and roll back to the previous value.
+- [`revert`](https://hexdocs.pm/optimist/optimist.html#reject) the optimistic
+  update to a previous value.
 
 ```gleam
-let response = Error(Nil)
-let resolved = wibble |> optimist.reject
+let resolved = wibble |> optimist.revert
 ```
 
 - [`force`](https://hexdocs.pm/optimist/optimist.html#force) the optimistic
