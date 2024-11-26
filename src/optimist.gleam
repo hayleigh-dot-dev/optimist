@@ -63,7 +63,7 @@ pub fn is_pending(optimistic: Optimistic(a)) -> Bool {
 
 // MANIPULATIONS ---------------------------------------------------------------
 
-/// Perform an optimistic update. If the current value is already resolved, this
+/// Push an optimistic update. If the current value is already resolved, this
 /// becomes a new optimistic update and the current value becomes the fallback.
 /// If the current value is already an optimistic update, the value is updated
 /// but the fallback remains unchanged.
@@ -77,7 +77,7 @@ pub fn is_pending(optimistic: Optimistic(a)) -> Bool {
 /// pub fn example() {
 ///   let optimistic =
 ///     optimist.from(1)
-///     |> optimist.update(2)
+///     |> optimist.push(2)
 ///     |> optimist.unwrap
 ///
 ///   optimistic |> should.equal(2)
@@ -93,8 +93,8 @@ pub fn is_pending(optimistic: Optimistic(a)) -> Bool {
 /// pub fn example() {
 ///   let optimistic =
 ///     optimist.from(1)
-///     |> optimist.update(2)
-///     |> optimist.update(3)
+///     |> optimist.push(2)
+///     |> optimist.push(3)
 ///     |> optimist.unwrap
 ///
 ///   optimistic |> should.equal(3)
@@ -110,8 +110,8 @@ pub fn is_pending(optimistic: Optimistic(a)) -> Bool {
 /// pub fn example() {
 ///   let optimistic =
 ///     optimist.from(1)
-///     |> optimist.update(2)
-///     |> optimist.update(3)
+///     |> optimist.push(2)
+///     |> optimist.push(3)
 ///     |> optimist.revert
 ///     |> optimist.unwrap
 ///
@@ -119,10 +119,73 @@ pub fn is_pending(optimistic: Optimistic(a)) -> Bool {
 /// }
 /// ```
 ///
-pub fn update(optimistic: Optimistic(a), value: a) -> Optimistic(a) {
+pub fn push(optimistic: Optimistic(a), value: a) -> Optimistic(a) {
   case optimistic {
     Resolved(fallback) -> Pending(value, fallback)
     Pending(_, fallback) -> Pending(value, fallback)
+  }
+}
+
+/// Perform an optimistic update. If the current value is already resolved, this
+/// becomes a new optimistic update and the current value becomes the fallback.
+/// If the current value is already an optimistic update, the value is updated
+/// but the fallback remains unchanged.
+///
+/// ### Optimistic update of a resolved value
+///
+/// ```gleam
+/// import gleeunit/should
+/// import optimist
+///
+/// pub fn example() {
+///   let optimistic =
+///     optimist.from(1)
+///     |> optimist.update(int.add(_, 1))
+///     |> optimist.unwrap
+///
+///   optimistic |> should.equal(2)
+/// }
+/// ```
+///
+/// ### Multiple optimistic updates
+///
+/// ```gleam
+/// import gleeunit/should
+/// import optimist
+///
+/// pub fn example() {
+///   let optimistic =
+///     optimist.from(1)
+///     |> optimist.update(int.add(_, 1))
+///     |> optimist.update(int.add(_, 2))
+///     |> optimist.unwrap
+///
+///   optimistic |> should.equal(3)
+/// }
+/// ```
+///
+/// ### Rejecting multiple optimistic updates
+///
+/// ```gleam
+/// import gleeunit/should
+/// import optimist
+///
+/// pub fn example() {
+///   let optimistic =
+///     optimist.from(1)
+///     |> optimist.update(int.add(_, 1))
+///     |> optimist.update(int.add(_, 2))
+///     |> optimist.revert
+///     |> optimist.unwrap
+///
+///   optimistic |> should.equal(1)
+/// }
+/// ```
+///
+pub fn update(optimistic: Optimistic(a), f: fn(a) -> a) -> Optimistic(a) {
+  case optimistic {
+    Resolved(fallback) -> Pending(f(fallback), fallback)
+    Pending(_, fallback) -> Pending(f(fallback), fallback)
   }
 }
 
@@ -153,7 +216,8 @@ pub fn force(optimistic: Optimistic(a)) -> Optimistic(a) {
   }
 }
 
-/// Take an `Optimistic` update and revert it back to its initial value.
+/// Take an `Optimistic` update and revert it back to its initial value if it is
+/// still pending.
 ///
 /// ### Reverting an optimistic update
 ///
@@ -179,13 +243,15 @@ pub fn revert(optimistic: Optimistic(a)) -> Optimistic(a) {
   }
 }
 
-/// Take a `Result` and use it to either resolve or reject an `Optimistic` update.
-/// This function is a convinient equivalent to the following:
+/// Take a `Result` and use it to resolve an optimistic update. If the result is
+/// `Ok` that value becomes a new resolved value. If the result is an `Error` and
+/// an optimistic update is pending, the fallback value is used to resolve the
+/// update.
 ///
 /// ```gleam
 /// case result {
 ///   Ok(value) -> optimist.from(value)
-///   Error(_) -> optimist.reject(optimistic)
+///   Error(_) -> optimist.revert(optimistic)
 /// }
 /// ```
 ///
@@ -200,7 +266,7 @@ pub fn revert(optimistic: Optimistic(a)) -> Optimistic(a) {
 ///   let optimstic =
 ///     optimist.from(1)
 ///     |> optimistic.update(2)
-///     |> optimist.try(result)
+///     |> optimist.resolve(result)
 ///     |> optimist.unwrap
 ///
 ///   optimistic |> should.equal(2)
@@ -218,18 +284,71 @@ pub fn revert(optimistic: Optimistic(a)) -> Optimistic(a) {
 ///   let optimistic =
 ///     optimist.from(1)
 ///     |> optimistic.update(2)
-///     |> optimist.try(result)
+///     |> optimist.resolve(result)
 ///     |> optimist.unwrap
 ///
 ///   optimistic |> should.equal(1)
 /// }
 /// ```
 ///
-pub fn try(optimistic: Optimistic(a), result: Result(a, _)) -> Optimistic(a) {
+pub fn resolve(optimistic: Optimistic(a), result: Result(a, _)) -> Optimistic(a) {
+  case result {
+    Ok(value) -> Resolved(value)
+    Error(_) -> revert(optimistic)
+  }
+}
+
+/// Take a `Result` and use it to resolve an optimistic update. If the result is
+/// `Ok` that provided callback is run using either the value of an already-resolved
+/// optimistic update, or the **fallback value** of a pending update.
+///
+/// ### Resolving a successful optimistic update
+///
+/// ```gleam
+/// import gleeunit/should
+/// import optimist
+///
+/// pub fn example() {
+///   let history = ["hey", "hi"]
+///   let result = Ok("how are you?")
+///   let optimistic =
+///     optimist.from(history)
+///     |> optimist.update(list.prepend(_, "how are you?"))
+///     |> optimist.try(result, list.prepend)
+///     |> optimist.unwrap
+///
+///   optimistic |> should.equal(["how are you?", "hey", "hi"]
+/// }
+/// ```
+///
+/// ### Resolving an unsuccessful optimistic update
+///
+/// ```gleam
+/// import gleeunit/should
+/// import optimist
+///
+/// pub fn example() {
+///   let history = ["hey", "hi"]
+///   let result = Error(Nil)
+///   let optimistic =
+///     optimist.from(history)
+///     |> optimist.update(list.prepend(_, "how are you?"))
+///     |> optimist.try(result, list.prepend)
+///     |> optimist.unwrap
+///
+///   optimistic |> should.equal(["hey", "hi"]
+/// }
+/// ```
+///
+pub fn try(
+  optimistic: Optimistic(a),
+  result: Result(b, _),
+  f: fn(a, b) -> a,
+) -> Optimistic(a) {
   case result, optimistic {
-    Ok(value), _ -> Resolved(value)
-    Error(_), Resolved(value) -> Resolved(value)
-    Error(_), Pending(_, fallback) -> Resolved(fallback)
+    Ok(a), Resolved(value) -> Resolved(f(value, a))
+    Ok(a), Pending(_, fallback) -> Resolved(f(fallback, a))
+    Error(_), _ -> revert(optimistic)
   }
 }
 
