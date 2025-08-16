@@ -160,7 +160,7 @@ pub fn push(optimistic: Optimistic(a), value: a) -> Optimistic(a) {
 ///     |> optimist.update(int.add(_, 2))
 ///     |> optimist.unwrap
 ///
-///   optimistic |> should.equal(3)
+///   optimistic |> should.equal(4)
 /// }
 /// ```
 ///
@@ -185,7 +185,7 @@ pub fn push(optimistic: Optimistic(a), value: a) -> Optimistic(a) {
 pub fn update(optimistic: Optimistic(a), f: fn(a) -> a) -> Optimistic(a) {
   case optimistic {
     Resolved(fallback) -> Pending(f(fallback), fallback)
-    Pending(_, fallback) -> Pending(f(fallback), fallback)
+    Pending(current, fallback) -> Pending(f(current), fallback)
   }
 }
 
@@ -201,7 +201,7 @@ pub fn update(optimistic: Optimistic(a), f: fn(a) -> a) -> Optimistic(a) {
 /// pub fn example() {
 ///   let optimistic =
 ///     optimist.from(1)
-///     |> optimist.update(2)
+///     |> optimist.push(2)
 ///     |> optimist.force
 ///     |> optimist.unwrap
 ///
@@ -263,9 +263,9 @@ pub fn revert(optimistic: Optimistic(a)) -> Optimistic(a) {
 ///
 /// pub fn example() {
 ///   let result = Ok(2)
-///   let optimstic =
+///   let optimistic =
 ///     optimist.from(1)
-///     |> optimistic.update(2)
+///     |> optimist.push(2)
 ///     |> optimist.resolve(result)
 ///     |> optimist.unwrap
 ///
@@ -283,7 +283,7 @@ pub fn revert(optimistic: Optimistic(a)) -> Optimistic(a) {
 ///   let result = Error("failed")
 ///   let optimistic =
 ///     optimist.from(1)
-///     |> optimistic.update(2)
+///     |> optimist.push(2)
 ///     |> optimist.resolve(result)
 ///     |> optimist.unwrap
 ///
@@ -317,7 +317,7 @@ pub fn resolve(optimistic: Optimistic(a), result: Result(a, _)) -> Optimistic(a)
 ///     |> optimist.try(result, list.prepend)
 ///     |> optimist.unwrap
 ///
-///   optimistic |> should.equal(["how are you?", "hey", "hi"]
+///   optimistic |> should.equal(["how are you?", "hey", "hi"])
 /// }
 /// ```
 ///
@@ -336,7 +336,7 @@ pub fn resolve(optimistic: Optimistic(a), result: Result(a, _)) -> Optimistic(a)
 ///     |> optimist.try(result, list.prepend)
 ///     |> optimist.unwrap
 ///
-///   optimistic |> should.equal(["hey", "hi"]
+///   optimistic |> should.equal(["hey", "hi"])
 /// }
 /// ```
 ///
